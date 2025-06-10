@@ -3,7 +3,6 @@ This code or file is part of 'PyCrafter' project
 copyright (c) 2025, Aymen Brahim Djelloul, All rights reserved.
 use of this source code is governed by MIT License that can be found on the project folder.
 
-
 @author : Aymen Brahim Djelloul
 version : 0.1
 date : 09.06.2025
@@ -20,6 +19,7 @@ import tempfile
 import threading
 import platform
 import subprocess
+import webbrowser
 import tempfile
 import logging
 from pathlib import Path
@@ -660,26 +660,65 @@ class PyCrafter:
         about.show()
 
     def _set_icon(self) -> None:
-        """Sets the application icon from the images folder and stores the path for reuse."""
+        """Sets the application icon, works in both PyCharm and EXE."""
         try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            self.icon_path = os.path.join(base_dir, "images", 'icon.ico')
+            # Determine the base path
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+
+            # Try to load icon normally
+            self.icon_path = os.path.join(base_path, 'icon.ico')
             if os.path.exists(self.icon_path):
                 self.root.iconbitmap(self.icon_path)
-                # Store the icon path for other dialogs to use
-                self.root.icon_path = self.icon_path
+                return
+
+            # Fallback: Embed icon data directly
+            if hasattr(self, '_icon_data'):
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.ico') as tmp:
+                    tmp.write(self._icon_data)
+                    tmp_path = tmp.name
+                self.root.iconbitmap(tmp_path)
+                # Schedule cleanup
+                self.root.after(1000, lambda: os.unlink(tmp_path) if os.path.exists(tmp_path) else None)
 
         except Exception as e:
             print(f"Failed to set app icon: {e}")
             self.icon_path = None
 
     def _apply_icon(self, window: tk.Toplevel) -> None:
-        """Applies the main window's icon to a dialog window."""
-        if hasattr(self, 'icon_path') and self.icon_path:
-            try:
+        """Applies the main window's icon to a dialog window, works in both PyCharm and EXE."""
+        try:
+            # Method 1: Try using the stored icon path (works in PyCharm)
+            if hasattr(self, 'icon_path') and self.icon_path and os.path.exists(self.icon_path):
                 window.iconbitmap(self.icon_path)
-            except Exception as e:
-                print(f"Could not set dialog icon: {e}")
+                return
+
+            # Method 2: Try using sys._MEIPASS (works in EXE)
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+
+            icon_path = os.path.join(base_path, 'images', 'icon.ico')
+            if os.path.exists(icon_path):
+                window.iconbitmap(icon_path)
+                return
+
+            # Method 3: Try using a temporary file (fallback)
+            if hasattr(self, '_icon_data'):
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.ico') as tmp:
+                    tmp.write(self._icon_data)
+                    tmp_path = tmp.name
+                window.iconbitmap(tmp_path)
+                # Schedule cleanup
+                window.after(1000, lambda: os.unlink(tmp_path) if os.path.exists(tmp_path) else None)
+
+        except Exception as e:
+            print(f"Could not set dialog icon: {e}")
 
     @staticmethod
     def parse_comma_separated(text: str) -> Optional[List[str]]:
@@ -1073,8 +1112,8 @@ class AboutDialog:
     """Optimized About Dialog for PyCrafter application"""
 
     # Class-level constants to reduce memory usage
-    DIALOG_SIZE = "450x400"
-    BUTTON_CONFIG = {
+    DIALOG_SIZE: str = "450x400"
+    BUTTON_CONFIG: dict = {
         'font': ("Segoe UI", 11),
         'relief': "flat",
         'borderwidth': 0,
@@ -1084,12 +1123,12 @@ class AboutDialog:
     }
 
     # Color mappings for hover effects
-    HOVER_COLORS = {
+    HOVER_COLORS: dict[str, str] = {
         'secondary': '#2980b9',
         'primary': '#c0392b'
     }
 
-    ACTIVE_COLORS = {
+    ACTIVE_COLORS: dict[str, str] = {
         'secondary': '#21618c',
         'primary': '#922b21'
     }
@@ -1129,7 +1168,7 @@ class AboutDialog:
         try:
             icon_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                "images",
+                # "images",
                 'icon.ico'
             )
             if os.path.exists(icon_path):
@@ -1343,11 +1382,6 @@ class AboutDialog:
         """Open URL in default browser (avoids repeated imports)."""
 
         try:
-            webbrowser.open(url, new=2)  # new=2 opens in new tab if possible
-        except ImportError:
-
-            # Import it
-            import webbrowser
             webbrowser.open(url, new=2)  # new=2 opens in new tab if possible
 
         except Exception:
